@@ -9,16 +9,22 @@ import { Rocket, Zap, Globe, Shield } from "lucide-react";
 
 const REDIRECT_URL = "https://edunoova.lovable.app";
 
+export type LaunchPhase = "idle" | "launching" | "ignition" | "systems" | "countdown" | "liftoff" | "live";
+
 const LaunchPage = () => {
-  const [phase, setPhase] = useState<"idle" | "launching" | "expanding" | "redirecting">("idle");
+  const [phase, setPhase] = useState<LaunchPhase>("idle");
 
   const handleLaunch = useCallback(() => {
     setPhase("launching");
-    setTimeout(() => setPhase("expanding"), 1800);
-    setTimeout(() => setPhase("redirecting"), 3200);
+    // Phase timeline (30+ seconds total)
+    setTimeout(() => setPhase("ignition"), 2000);     // 2s: button spinner
+    setTimeout(() => setPhase("systems"), 5000);       // 5s: system checks
+    setTimeout(() => setPhase("countdown"), 15000);    // 15s: countdown 5-4-3-2-1
+    setTimeout(() => setPhase("liftoff"), 21000);      // 21s: liftoff explosion
+    setTimeout(() => setPhase("live"), 27000);         // 27s: EDUNOVA IS LIVE
     setTimeout(() => {
       window.location.href = REDIRECT_URL;
-    }, 4000);
+    }, 32000);                                         // 32s: redirect
   }, []);
 
   return (
