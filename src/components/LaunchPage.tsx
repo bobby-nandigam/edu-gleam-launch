@@ -200,7 +200,7 @@ const LaunchPage = () => {
               animate={{ opacity: 1 }}
               transition={{ delay: 2.2, duration: 0.8 }}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
               <span className="text-xs text-muted-foreground tracking-wider uppercase" style={{ fontFamily: "var(--font-body)" }}>
                 Systems Online — Ready to Deploy
               </span>
