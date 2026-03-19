@@ -50,10 +50,12 @@ const LaunchPage = () => {
         window.location.href = REDIRECT_URL;
       }, 48000);
     } else {
-      setTimeout(() => setPhase("live"), 30000);
+      setTimeout(() => setPhase("inauguration"), 30000);
+      setTimeout(() => setPhase("thankyou"), 36000);
+      setTimeout(() => setPhase("live"), 42000);
       setTimeout(() => {
         window.location.href = REDIRECT_URL;
-      }, 36000);
+      }, 48000);
     }
   }, []);
 

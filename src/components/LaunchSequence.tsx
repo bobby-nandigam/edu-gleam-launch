@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Server, Database, Shield, Cpu, Wifi, Globe, Rocket, Sparkles, Heart, Crown, Star, Gem, Award } from "lucide-react";
+import * as Tone from "tone";
 import type { LaunchPhase } from "@/components/LaunchPage";
 
 interface LaunchSequenceProps {
@@ -34,7 +35,7 @@ const STATS = [
 const CountdownNumber = ({ number }: { number: number }) => (
   <motion.div
     key={number}
-    className="text-[14rem] md:text-[18rem] font-black leading-none"
+    className="text-[8rem] sm:text-[12rem] md:text-[16rem] lg:text-[18rem] font-black leading-none"
     style={{
       fontFamily: "var(--font-display)",
       background: "linear-gradient(180deg, hsl(0 0% 100%), hsl(217 91% 70%))",
@@ -160,6 +161,15 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
   const isActive = phase !== "idle" && phase !== "launching";
   const [countdown, setCountdown] = useState(5);
   const [activeCheckIndex, setActiveCheckIndex] = useState(0);
+  const [currentTime, setCurrentTime] = useState<string>("");
+
+  useEffect(() => {
+    setCurrentTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (phase === "systems") {
@@ -174,16 +184,72 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
     }
   }, [phase]);
 
+  // Play countdown number voice (5, 4, 3, 2, 1, 0)
   useEffect(() => {
     if (phase === "countdown") {
       setCountdown(5);
       const interval = setInterval(() => {
         setCountdown((prev) => {
-          if (prev <= 1) { clearInterval(interval); return 0; }
+          if (prev > 0) {
+            // Use Web Speech API to speak the number
+            const utterance = new SpeechSynthesisUtterance(String(prev));
+            utterance.rate = 1.2;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+          } else if (prev === 0) {
+            // Final "zero" or "launch"
+            const utterance = new SpeechSynthesisUtterance("Launch");
+            utterance.rate = 1.5;
+            utterance.pitch = 1.2;
+            utterance.volume = 1.0;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+            clearInterval(interval);
+            return 0;
+          }
           return prev - 1;
         });
       }, 1000);
-      return () => clearInterval(interval);
+      return () => {
+        clearInterval(interval);
+        window.speechSynthesis.cancel();
+      };
+    }
+  }, [phase]);
+
+  // Play loading sound during systems phase and powerup
+  useEffect(() => {
+    if (phase === "ignition" || phase === "systems" || phase === "powerup") {
+      const startLoadingSound = async () => {
+        await Tone.start();
+        const synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: "triangle" },
+          envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.1 },
+        }).toDestination();
+
+        const loadingPattern = setInterval(() => {
+          // Sci-fi loading sequence
+          synth.triggerAttackRelease("C4", "32n");
+          setTimeout(() => synth.triggerAttackRelease("D4", "32n"), 80);
+          setTimeout(() => synth.triggerAttackRelease("E4", "32n"), 160);
+        }, 400);
+
+        return () => {
+          clearInterval(loadingPattern);
+          synth.dispose();
+        };
+      };
+
+      let cleanupFn: (() => void) | null = null;
+      startLoadingSound().then((cleanup) => {
+        cleanupFn = cleanup;
+      });
+
+      return () => {
+        if (cleanupFn) cleanupFn();
+      };
     }
   }, [phase]);
 
@@ -206,12 +272,56 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
             backgroundSize: '50px 50px'
           }} />
 
+          {/* Flower Bokeh Effect - Loading Phase */}
+          {(phase === "ignition" || phase === "systems") && (
+            <>
+              {Array.from({ length: 40 }).map((_, i) => (
+                <motion.div
+                  key={`flower-${i}`}
+                  className="absolute w-2 h-2 rounded-full"
+                  style={{
+                    background: `radial-gradient(circle, hsl(${199 + Math.random() * 30} ${80 + Math.random() * 20}% ${50 + Math.random() * 20}%) 0%, transparent 70%)`,
+                    boxShadow: "0 0 20px currentColor",
+                    filter: "blur(1px)",
+                  }}
+                  initial={{
+                    x: (Math.random() - 0.5) * window.innerWidth,
+                    y: (Math.random() - 0.5) * window.innerHeight,
+                    scale: 0,
+                    opacity: 0,
+                  }}
+                  animate={{
+                    x: (Math.random() - 0.5) * window.innerWidth * 2,
+                    y: (Math.random() - 0.5) * window.innerHeight * 2,
+                    scale: [0, 1.5, 0.5],
+                    opacity: [0, 0.6, 0.1],
+                  }}
+                  transition={{
+                    duration: 3 + Math.random() * 2,
+                    repeat: Infinity,
+                    delay: i * 0.05,
+                  }}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Timestamp */}
+          <motion.div
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 md:top-8 md:right-8 text-[10px] sm:text-xs font-mono text-accent/60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            {currentTime}
+          </motion.div>
+
           <AnimatePresence mode="wait">
             {/* PHASE: IGNITION + SYSTEMS */}
             {(phase === "ignition" || phase === "systems") && (
               <motion.div
                 key="systems"
-                className="relative z-10 flex flex-col items-center w-full max-w-lg px-6"
+                className="relative z-10 flex flex-col items-center w-full max-w-sm sm:max-w-md md:max-w-lg px-4 sm:px-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, y: -30, filter: "blur(15px)" }}
@@ -225,7 +335,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.h2
-                  className="text-3xl md:text-4xl font-black text-primary-foreground mb-8 tracking-tight"
+                  className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-primary-foreground mb-6 sm:mb-8 tracking-tight"
                   style={{ fontFamily: "var(--font-display)" }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -266,7 +376,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
             {phase === "powerup" && (
               <motion.div
                 key="powerup"
-                className="relative z-10 flex flex-col items-center w-full max-w-md px-6"
+                className="relative z-10 flex flex-col items-center w-full max-w-sm sm:max-w-md px-4 sm:px-6"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.1, filter: "blur(20px)" }}
@@ -281,7 +391,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.h2
-                  className="text-2xl md:text-3xl font-black text-primary-foreground mb-2 tracking-tight"
+                  className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black text-primary-foreground mb-2 tracking-tight"
                   style={{ fontFamily: "var(--font-display)" }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -392,7 +502,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.h2
-                  className="text-5xl md:text-6xl font-black tracking-tighter mt-8"
+                  className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter mt-6 sm:mt-8"
                   style={{
                     fontFamily: "var(--font-display)",
                     background: "linear-gradient(135deg, hsl(0 0% 100%), hsl(199 89% 60%))",
@@ -407,7 +517,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.h2>
 
                 <motion.div
-                  className="flex gap-8 md:gap-12 mt-10"
+                  className="flex gap-2 sm:gap-4 md:gap-8 lg:gap-12 mt-6 sm:mt-10 flex-wrap justify-center"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.2, duration: 0.6 }}
@@ -415,15 +525,15 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                   {STATS.map((stat, i) => (
                     <motion.div
                       key={stat.label}
-                      className="text-center"
+                      className="text-center flex-1 min-w-0"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 1.4 + i * 0.15 }}
                     >
-                      <div className="text-2xl md:text-3xl font-black text-accent" style={{ fontFamily: "var(--font-display)" }}>
+                      <div className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-black text-accent" style={{ fontFamily: "var(--font-display)" }}>
                         {stat.value}
                       </div>
-                      <div className="text-[10px] text-primary-foreground/40 mt-1 tracking-wider uppercase" style={{ fontFamily: "var(--font-body)" }}>
+                      <div className="text-[9px] sm:text-[10px] text-primary-foreground/40 mt-1 tracking-wider uppercase" style={{ fontFamily: "var(--font-body)" }}>
                         {stat.label}
                       </div>
                     </motion.div>
@@ -436,7 +546,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
             {phase === "inauguration" && (
               <motion.div
                 key="inauguration"
-                className="relative z-10 flex flex-col items-center text-center px-6"
+                className="relative z-10 flex flex-col items-center text-center px-4 sm:px-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, filter: "blur(10px)" }}
@@ -478,7 +588,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
 
                 {/* Welcome text */}
                 <motion.p
-                  className="text-primary-foreground/50 text-sm tracking-[0.2em] uppercase mb-3"
+                  className="text-primary-foreground/50 text-xs sm:text-sm tracking-[0.2em] uppercase mb-2 sm:mb-3"
                   style={{ fontFamily: "var(--font-body)" }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -489,7 +599,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
 
                 {/* Hema Saitha's name */}
                 <motion.h1
-                  className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight leading-tight mb-4"
+                  className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black tracking-tight leading-tight mb-3 sm:mb-4"
                   style={{
                     fontFamily: "var(--font-display)",
                     background: "linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(199 89% 70%) 50%, hsl(217 91% 80%) 100%)",
@@ -500,8 +610,22 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: 1, duration: 1, type: "spring", stiffness: 60 }}
                 >
-                  Hema Saitha
+                  Thank You, Hema Saitha
                 </motion.h1>
+
+                {/* Decorator badge for role */}
+                <motion.div
+                  className="flex items-center gap-3 mb-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1.4 }}
+                >
+                  <Award className="w-5 h-5 text-accent" />
+                  <span className="text-sm font-semibold tracking-[0.2em] uppercase text-accent" style={{ fontFamily: "var(--font-body)" }}>
+                    Guest of Honor
+                  </span>
+                  <Award className="w-5 h-5 text-accent" />
+                </motion.div>
 
                 {/* Decorative line */}
                 <motion.div
@@ -516,13 +640,13 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.p
-                  className="text-primary-foreground/60 text-base md:text-lg max-w-md leading-relaxed"
+                  className="text-primary-foreground/60 text-sm sm:text-base md:text-lg max-w-xs sm:max-w-sm md:max-w-md leading-relaxed px-2"
                   style={{ fontFamily: "var(--font-body)" }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1.8 }}
                 >
-                  The visionary behind Edunova — a platform built with passion to transform education for millions around the world.
+                  Thank you for joining us on this special occasion and being part of the inauguration. Your presence made this moment even more meaningful. Edunova exists because of you. 🙏
                 </motion.p>
 
                 {/* Floating sparkles */}
@@ -546,7 +670,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
             {phase === "thankyou" && (
               <motion.div
                 key="thankyou"
-                className="relative z-10 flex flex-col items-center text-center px-6"
+                className="relative z-10 flex flex-col items-center text-center px-4 sm:px-6"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, scale: 0.95, filter: "blur(10px)" }}
@@ -576,7 +700,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.h2
-                  className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight mb-4"
+                  className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black tracking-tight mb-3 sm:mb-4"
                   style={{
                     fontFamily: "var(--font-display)",
                     background: "linear-gradient(135deg, hsl(0 0% 100%), hsl(199 89% 70%))",
@@ -587,42 +711,35 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5, type: "spring", stiffness: 80 }}
                 >
-                  Thank You, Hema Saitha
+                  Thank You
                 </motion.h2>
 
-                <motion.div
-                  className="flex items-center gap-3 mb-6"
+                <motion.p
+                  className="text-primary-foreground/50 text-sm sm:text-base md:text-lg max-w-xs sm:max-w-sm md:max-w-lg leading-relaxed mb-6 sm:mb-8 px-2"
+                  style={{ fontFamily: "var(--font-body)" }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1 }}
                 >
-                  <Award className="w-5 h-5 text-accent" />
-                  <span className="text-sm font-semibold tracking-[0.2em] uppercase text-accent" style={{ fontFamily: "var(--font-body)" }}>
-                    Founder & Visionary
-                  </span>
-                  <Award className="w-5 h-5 text-accent" />
-                </motion.div>
-
-                <motion.p
-                  className="text-primary-foreground/50 text-base md:text-lg max-w-lg leading-relaxed mb-8"
-                  style={{ fontFamily: "var(--font-body)" }}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 1.3 }}
-                >
-                  For your tireless dedication, your incredible vision, and your unwavering belief that education can change the world — this launch is a tribute to you. Edunova exists because of you. 🙏
+                  We sincerely thank you for joining us on this special occasion and being part of this memorable beginning as we take our first step forward.
                 </motion.p>
 
-                {/* Decorative elements */}
+                {/* Inaugurated by Hema Saitha with timestamp */}
                 <motion.div
-                  className="flex items-center gap-6"
+                  className="flex flex-col items-center gap-3 mb-6"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.8 }}
                 >
                   <div className="h-[1px] w-20 bg-gradient-to-r from-transparent to-primary/40" />
-                  <span className="text-primary-foreground/30 text-xs tracking-[0.3em] uppercase" style={{ fontFamily: "var(--font-body)" }}>
-                    With gratitude
+                  <span className="text-primary-foreground/40 text-[10px] sm:text-xs tracking-[0.2em] uppercase" style={{ fontFamily: "var(--font-body)" }}>
+                    Inaugurated By
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-accent" style={{ fontFamily: "var(--font-display)" }}>
+                    Hema Saitha
+                  </span>
+                  <span className="text-primary-foreground/30 text-[9px] sm:text-xs tracking-[0.2em] uppercase" style={{ fontFamily: "var(--font-body)" }}>
+                    {currentTime}
                   </span>
                   <div className="h-[1px] w-20 bg-gradient-to-l from-transparent to-primary/40" />
                 </motion.div>
@@ -693,7 +810,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.div>
 
                 <motion.h1
-                  className="text-5xl sm:text-6xl md:text-8xl font-black tracking-tighter leading-none mb-4"
+                  className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-black tracking-tighter leading-none mb-3 sm:mb-4"
                   style={{
                     fontFamily: "var(--font-display)",
                     background: "linear-gradient(135deg, hsl(0 0% 100%), hsl(199 89% 65%))",
@@ -708,7 +825,7 @@ const LaunchSequence = ({ phase, isFirstTime }: LaunchSequenceProps) => {
                 </motion.h1>
 
                 <motion.p
-                  className="text-primary-foreground/50 text-base md:text-lg mb-8"
+                  className="text-primary-foreground/50 text-sm sm:text-base md:text-lg mb-6 sm:mb-8"
                   style={{ fontFamily: "var(--font-body)" }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
